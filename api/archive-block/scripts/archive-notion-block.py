@@ -64,7 +64,7 @@ def main() -> None:
     if len(sys.argv) < 2:
         raise SystemExit("usage: archive-notion-block.py <block_id>")
     block_id = sys.argv[1]
-    data = '{"archived":true}'
+    data = '{"in_trash":true}'
     raw = run_curl("patch", f"/blocks/{block_id}", data)
     sys.stdout.write(raw.decode("utf-8", errors="replace"))
 

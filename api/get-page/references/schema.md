@@ -47,7 +47,7 @@ stdout prints the raw JSON response returned by the [retrieve a page](https://de
     "database_id": "string (optional)",
     "page_id": "string (optional)"
   },
-  "archived": false,
+  "in_trash": false,
   "properties": {
     "title": {
       "id": "title",

@@ -10,13 +10,15 @@ API_DIR = Path(__file__).resolve().parent.parent.parent.parent / "api"
 GET_PAGE = str(API_DIR / "get-page" / "scripts" / "get-notion-page.py")
 GET_BLOCK_CHILDREN = str(API_DIR / "get-block-children" / "scripts" / "get-notion-block-children.py")
 QUERY_DATABASE = str(API_DIR / "query-database" / "scripts" / "query-notion-database.py")
+GET_MARKDOWN = str(API_DIR / "update-page" / "scripts" / "update-notion-page.py")
 
 ROOT_DIR = Path("notion")
+SHADOW_INDEX = {}
 
 def run_python_script(script_path, *args):
     cmd = [sys.executable, script_path, *args]
     env = os.environ.copy()
-    env["NOTION_VERSION"] = "2022-06-28"
+    env["NOTION_VERSION"] = "2026-03-11"
     res = subprocess.run(cmd, capture_output=True, text=True, env=env)
     if res.returncode != 0:
         print(f"Error running {script_path} with {args}: {res.stderr}")
@@ -82,50 +84,50 @@ def sync_database(db_dir, db_id):
             write_notion_yaml(target_dir / "notion.yaml", "page", remote_id)
         sync_page(target_dir, remote_id, page_obj)
 
+def export_blocks(page_id):
+    blocks = run_python_script(GET_BLOCK_CHILDREN, page_id)
+    if not blocks or "results" not in blocks:
+        return None, []
+    lines, shadow = [], []
+    for block in blocks.get("results", []):
+        b_type = block.get("type")
+        b_data = block.get(b_type, {})
+        text = "".join(t.get("plain_text", "") for t in b_data.get("rich_text", []))
+        if b_type == "paragraph": line = text
+        elif b_type.startswith("heading_"): line = f"{'#' * int(b_type.split('_')[1])} {text}"
+        elif b_type == "bulleted_list_item": line = f"- {text}"
+        elif b_type == "numbered_list_item": line = f"1. {text}"
+        elif b_type == "child_database":
+            title = b_data.get("title", "Database"); line = f"- [{title}](./{title.lower()}/database.md)"
+        elif b_type == "child_page":
+            title = b_data.get("title", "Page"); line = f"- [{title}](./{title.lower()}/page.md)"
+        else: line = text
+        lines.append(line)
+        shadow.append({"id": block.get("id"), "type": b_type, "md_line": line})
+    return "\n\n".join(lines).strip(), shadow
+
 def sync_page(page_dir, page_id, page_metadata=None):
     print(f"Syncing page {page_id} in {page_dir}")
     if not page_metadata:
         page_metadata = run_python_script(GET_PAGE, page_id)
-        
-    blocks = run_python_script(GET_BLOCK_CHILDREN, page_id)
-    if not blocks or "results" not in blocks:
-        return
-        
-    md_lines = []
-    md_lines.append("---")
-    md_lines.append(f"id: {page_id}")
+
+    markdown_response = run_python_script(GET_MARKDOWN, page_id, "--read-markdown")
+    complete_markdown = isinstance(markdown_response, dict) and not markdown_response.get("truncated") and not markdown_response.get("unknown_block_ids")
+    if complete_markdown:
+        body = markdown_response.get("markdown", "").strip()
+        SHADOW_INDEX[page_id] = {"markdown": body, "block_fallback": False}
+    else:
+        body, blocks = export_blocks(page_id)
+        if body is None:
+            return
+        SHADOW_INDEX[page_id] = {"markdown": body, "block_fallback": True, "blocks": blocks}
+
+    fm_lines = ["---", f"id: {page_id}"]
     if page_metadata:
-        title = get_page_title(page_metadata)
-        md_lines.append(f"title: {title}")
-    md_lines.append("---")
-    
-    for block in blocks.get("results", []):
-        b_type = block.get("type")
-        b_data = block.get(b_type, {})
-        text_arr = b_data.get("rich_text", [])
-        text = "".join(t.get("plain_text", "") for t in text_arr)
-        
-        if b_type == "paragraph":
-            if text:
-                md_lines.append(f"{text}\n")
-            else:
-                md_lines.append("")
-        elif b_type.startswith("heading_"):
-            level = b_type.split("_")[1]
-            md_lines.append(f"{'#' * int(level)} {text}\n")
-        elif b_type == "bulleted_list_item":
-            md_lines.append(f"- {text}")
-        elif b_type == "numbered_list_item":
-            md_lines.append(f"1. {text}")
-        elif b_type == "child_database":
-            child_title = b_data.get("title", "Database")
-            md_lines.append(f"- [{child_title}](./{child_title.lower()}/database.md)")
-        elif b_type == "child_page":
-            child_title = b_data.get("title", "Page")
-            md_lines.append(f"- [{child_title}](./{child_title.lower()}/page.md)")
-            
+        fm_lines.append(f"title: {get_page_title(page_metadata)}")
+    fm_lines.append("---")
     page_md = page_dir / "page.md"
-    new_content = "\n".join(md_lines)
+    new_content = "\n".join(fm_lines) + "\n\n" + body.rstrip() + "\n"
     
     if page_md.exists():
         old_content = page_md.read_text("utf-8")
@@ -137,10 +139,18 @@ def sync_page(page_dir, page_id, page_metadata=None):
         page_md.write_text(new_content, "utf-8")
 
 def main():
+    global SHADOW_INDEX
     if not ROOT_DIR.exists():
         print("No notion directory found.")
         return
         
+    index_file = ROOT_DIR / ".notion-index.json"
+    if index_file.exists():
+        try:
+            SHADOW_INDEX = json.loads(index_file.read_text("utf-8"))
+        except:
+            SHADOW_INDEX = {}
+
     for root, dirs, files in os.walk(ROOT_DIR):
         root_path = Path(root)
         yaml_path = root_path / "notion.yaml"
@@ -150,11 +160,13 @@ def main():
             n_id = info.get("id")
             if not n_id:
                 continue
-                
+
             if n_type == "database":
                 sync_database(root_path, n_id)
             elif n_type == "page" and root_path == ROOT_DIR:
                 sync_page(root_path, n_id)
+
+    index_file.write_text(json.dumps(SHADOW_INDEX, indent=2), "utf-8")
 
 if __name__ == "__main__":
     main()

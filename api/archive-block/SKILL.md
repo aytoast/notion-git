@@ -1,6 +1,6 @@
 ﻿---
 name: archive-block
-description: archive a block in the notion API.
+description: move a block to trash in the Notion API.
 ---
 
 # archive-notion-block

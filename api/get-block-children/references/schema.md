@@ -48,7 +48,7 @@ stdout prints the raw JSON response returned by the [retrieve block children](ht
         "id": "string"
       },
       "has_children": false,
-      "archived": false,
+      "in_trash": false,
       "type": "paragraph | heading_1 | heading_2 | heading_3 | bulleted_list_item | numbered_list_item | child_page | child_database",
       "paragraph": {
         "rich_text": [

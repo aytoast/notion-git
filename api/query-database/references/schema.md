@@ -50,7 +50,7 @@ stdout prints the raw JSON response returned by the [query a database](https://d
         "type": "database_id",
         "database_id": "string"
       },
-      "archived": false,
+      "in_trash": false,
       "properties": {
         "Name": {
           "id": "title",

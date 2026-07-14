@@ -1,4 +1,5 @@
 import os
+import json
 import shutil
 import subprocess
 import sys
@@ -67,13 +68,49 @@ def resolve_data(arg: str) -> str:
         return Path(arg[1:]).read_text(encoding="utf-8")
     return arg
 
+def content_request(page_id: str, command_type: str, command: dict) -> bytes:
+    return run_curl(
+        "patch",
+        f"/pages/{page_id}/markdown",
+        json.dumps({"type": command_type, command_type: command}, ensure_ascii=False),
+    )
+
+def print_usage() -> None:
+    raise SystemExit(
+        "usage:\n"
+        "  update-notion-page.py <page_id> <properties_json>\n"
+        "  update-notion-page.py <page_id> --read-markdown [--include-transcript]\n"
+        "  update-notion-page.py <page_id> --update <old_str> <new_str> [--replace-all] [--allow-deleting-content]\n"
+        "  update-notion-page.py <page_id> --replace <markdown> [--allow-deleting-content]"
+    )
+
 def main() -> None:
     if len(sys.argv) < 3:
-        raise SystemExit("usage: update-notion-page.py <page_id> <json_data>")
+        print_usage()
     page_id = sys.argv[1]
-    raw_data = sys.argv[2]
-    data = resolve_data(raw_data)
-    raw = run_curl("patch", f"/pages/{page_id}", data)
+    command = sys.argv[2]
+    if command == "--read-markdown":
+        suffix = "?include_transcript=true" if "--include-transcript" in sys.argv[3:] else ""
+        raw = run_curl("get", f"/pages/{page_id}/markdown{suffix}")
+    elif command == "--update":
+        if len(sys.argv) < 5:
+            print_usage()
+        update = {"old_str": resolve_data(sys.argv[3]), "new_str": resolve_data(sys.argv[4])}
+        if "--replace-all" in sys.argv[5:]:
+            update["replace_all_matches"] = True
+        if "--allow-deleting-content" in sys.argv[5:]:
+            update["allow_deleting_content"] = True
+        raw = content_request(page_id, "update_content", {"content_updates": [update]})
+    elif command == "--replace":
+        if len(sys.argv) < 4:
+            print_usage()
+        replace = {"new_str": resolve_data(sys.argv[3])}
+        if "--allow-deleting-content" in sys.argv[4:]:
+            replace["allow_deleting_content"] = True
+        raw = content_request(page_id, "replace_content", replace)
+    else:
+        data = resolve_data(command)
+        raw = run_curl("patch", f"/pages/{page_id}", data)
     sys.stdout.write(raw.decode("utf-8", errors="replace"))
 
 if __name__ == "__main__":

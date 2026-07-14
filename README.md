@@ -1,7 +1,7 @@
 # notion-git
 
 <p align="center">
-  <strong>Git-style operations for Notion.</strong>
+  <strong>Git-style operations for Notion. Bypass OAuth expiration loops with persistent auth.</strong>
 </p>
 
 <p align="center">
@@ -37,7 +37,7 @@ Forget about configuring complex MCP gateways. Treat Notion as your remote sourc
 1. **`notion clone`**: Downloads the remote workspace tree from Notion to your local markdown directory.
 2. **`notion diff`**: Compares your local markdown edits directly against the live Notion API to preview what will change.
 3. **`notion pull`**: Fetches remote Notion changes and synchronizes them into your local markdown files, overwriting outdated local state.
-4. **`notion push`**: Translates local markdown edits into Notion API payloads and patches the remote blocks directly.
+4. **`notion push`**: Uses Markdown Content API for normal page-body changes and block API fallback for unsupported content.
 
 *(Note: Currently, `notion pull` is fully implemented as `notion-pull`, with the other commands acting as the conceptual framework for upcoming releases).*
 
@@ -111,7 +111,7 @@ Located under `api/`. Clean, isolated wrappers around Notion endpoints that exec
 | `get-user` | `GET /v1/users/me` | Verifies integration user. |
 | `query-database` | `POST /v1/databases/{id}/query` | Filters and retrieves database pages. |
 | `update-block` | `PATCH /v1/blocks/{id}` | Modifies block content. |
-| `update-page` | `PATCH /v1/pages/{id}` | Patches page properties. |
+| `update-page` | `GET/PATCH /v1/pages/{id}/markdown`, `PATCH /v1/pages/{id}` | Reads and updates page Markdown; patches page properties. |
 
 ---
 

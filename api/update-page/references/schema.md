@@ -1,13 +1,13 @@
 # update-page API skill reference
 
-specification of input parameters, environment variables, and expected output formats for the update-page skill.
+Uses Notion API version `2026-03-11`.
 
 ## input
 
 ### arguments
 
 1. `page_id` (required, string): the id of the page to update.
-2. `json_data` (required, string): JSON representation of updated page properties.
+2. One operation: property JSON, `--read-markdown`, `--update <old_str> <new_str>`, or `--replace <markdown>`.
 
 ### environment variables
 
@@ -15,4 +15,4 @@ specification of input parameters, environment variables, and expected output fo
 
 ## output
 
-stdout prints the raw JSON response returned by the [update page properties](https://developers.notion.com/reference/patch-page) API endpoint.
+stdout prints raw JSON response. Markdown responses contain `markdown`, `truncated`, and `unknown_block_ids`.
